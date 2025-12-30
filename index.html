@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebGL2 Aero Lab</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <canvas id="glcanvas"></canvas>
+
+    <div id="ui-container">
+        <div class="header">
+            <h3><i class="fas fa-wind"></i> Aero Lab V3</h3>
+            <button id="toggleUI" class="icon-btn"><i class="fas fa-minus"></i></button>
+        </div>
+        
+        <div id="controls">
+            <div class="control-group">
+                <label>Scenarios</label>
+                <div class="preset-grid">
+                    <button class="preset-btn" data-preset="cruise">Cruise</button>
+                    <button class="preset-btn" data-preset="f1">F1 Aero</button>
+                    <button class="preset-btn" data-preset="storm">Storm</button>
+                    <button class="preset-btn" data-preset="jelly">Thick Oil</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Obstacle Shape</label>
+                <select id="shapeSelect">
+                    <option value="0">Cylinder</option>
+                    <option value="1">Block</option>
+                    <option value="2">Airfoil (Wing)</option>
+                    <option value="3">F1 Car</option>
+                    <option value="4">Fighter Jet</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Tunnel Floor</label>
+                <div class="checkbox-wrapper">
+                    <input type="checkbox" id="floorToggle" checked>
+                    <span>Enable Ground Effect</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Wind Speed <span id="val-wind">1.0</span></label>
+                <input type="range" id="windSpeed" min="0" max="4.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="control-group">
+                <label>Viscosity <span id="val-visc">0</span></label>
+                <input type="range" id="viscosity" min="0" max="50" step="1" value="0">
+            </div>
+
+            <div class="control-group">
+                <label>Visuals</label>
+                <div class="btn-row">
+                    <button id="resetDye"><i class="fas fa-eraser"></i> Clear</button>
+                    <button id="toggleColor"><i class="fas fa-palette"></i> Color</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="btn-row">
+                    <button id="pauseBtn"><i class="fas fa-pause"></i> Pause</button>
+                </div>
+            </div>
+
+            <div class="info">
+                Right Click to drag obstacles.<br>
+                Left Click to add smoke.
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
