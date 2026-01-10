@@ -2,85 +2,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>WebGL2 Aero Lab</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Wind Tunnel</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="glcanvas"></canvas>
+    <div id="canvas-container"></div>
 
-    <div id="ui-container">
-        <div class="header">
-            <h3><i class="fas fa-wind"></i> Aero Lab V4</h3>
-            <button id="toggleUI" class="icon-btn"><i class="fas fa-minus"></i></button>
+    <div id="ui-panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i class="fas fa-wind"></i>
+                Vapor Flow 3D
+            </div>
+            <button class="toggle-btn" id="togglePanel">
+                <i class="fas fa-chevron-up"></i>
+            </button>
         </div>
         
-        <div id="controls">
-            <div class="control-group">
-                <label>Scenarios</label>
-                <div class="preset-grid">
-                    <button class="preset-btn" data-preset="cruise">Cruise</button>
-                    <button class="preset-btn" data-preset="storm">Storm</button>
-                    <button class="preset-btn" data-preset="drag">Drag Test</button>
-                    <button class="preset-btn" data-preset="jelly">Thick Oil</button>
+        <div id="panel-content">
+            <div class="control-section">
+                <div class="control-label">
+                    <span>Flow Speed</span>
+                    <span class="control-value" id="speedValue">100 km/h</span>
                 </div>
+                <input type="range" id="windSpeed" min="0" max="350" step="10" value="100">
             </div>
 
-            <div class="control-group">
-                <label>Obstacle Shape</label>
+            <div class="control-section">
+                <div class="control-label">
+                    <span>Obstacle</span>
+                </div>
                 <select id="shapeSelect">
-                    <option value="0">Cylinder</option>
-                    <option value="1">Block</option>
-                    <option value="2" selected>Airfoil (Wing)</option>
-                    <option value="4">Fighter Jet</option>
+                    <option value="wing" selected>Aerodynamic Wing</option>
+                    <option value="sphere">Sphere</option>
+                    <option value="cube">Cube</option>
+                    <option value="car">Low Poly Car</option>
                 </select>
             </div>
 
-            <div class="control-group">
-                <label>Tunnel Floor</label>
-                <div class="checkbox-wrapper">
-                    <input type="checkbox" id="floorToggle" checked>
-                    <span>Enable Ground Effect</span>
+            <div class="control-section">
+                <div class="control-label">
+                    <span>Smoke Density</span>
+                    <span class="control-value" id="countValue">8000</span>
+                </div>
+                <input type="range" id="particleCount" min="2000" max="15000" step="1000" value="8000">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="control-section">
+                <div class="checkbox-control">
+                    <input type="checkbox" id="rotateToggle">
+                    <label for="rotateToggle">Auto-Rotate View</label>
                 </div>
             </div>
 
-            <div class="control-group">
-                <label>Wind Speed <span id="val-wind">1.2</span></label>
-                <input type="range" id="windSpeed" min="0" max="3.0" step="0.1" value="1.2">
-            </div>
-
-            <div class="control-group">
-                <label>Zoom <span id="val-zoom">1.0x</span></label>
-                <input type="range" id="zoomSlider" min="0.5" max="3.0" step="0.1" value="1.0">
-            </div>
-
-            <div class="control-group">
-                <label>Viscosity <span id="val-visc">0.00</span></label>
-                <input type="range" id="viscosity" min="0" max="0.2" step="0.001" value="0.0">
-            </div>
-
-            <div class="control-group">
-                <label>Visuals</label>
-                <div class="btn-row">
-                    <button id="resetDye"><i class="fas fa-eraser"></i> Clear</button>
-                    <button id="toggleColor"><i class="fas fa-palette"></i> Color</button>
+            <div class="control-section">
+                <div class="button-group">
+                    <button id="resetCam">
+                        <i class="fas fa-camera"></i> Reset
+                    </button>
+                    <button id="pauseBtn">
+                        <i class="fas fa-pause"></i> Pause
+                    </button>
                 </div>
             </div>
 
-            <div class="control-group">
-                <div class="btn-row">
-                    <button id="pauseBtn"><i class="fas fa-pause"></i> Pause</button>
-                </div>
-            </div>
-
-            <div class="info">
-                Scroll to Zoom.<br>
-                Right Click to drag obstacles.<br>
-                Left Click to add smoke.
+            <div class="info-box">
+                <strong>Visuals:</strong><br>
+                High-speed "Vapor Cone" rendering enabled.<br>
+                <span style="color: #4fc3f7">Use scroll to zoom inside the smoke.</span>
             </div>
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>
