@@ -1,160 +1,18 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    user-select: none;
-}
-
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #050505; /* Deep dark background */
-    color: #e0e0e0;
-    overflow: hidden;
-    width: 100vw;
-    height: 100vh;
-}
-
-#canvas-container {
-    width: 100%;
-    height: 100%;
-    display: block;
-    background: radial-gradient(circle at center, #1a1a20 0%, #000000 100%);
-}
-
-#ui-panel {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    width: 320px;
-    background: rgba(15, 15, 20, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    transition: all 0.3s ease;
-    z-index: 100;
-}
-
-.panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.panel-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: #4fc3f7; /* Cyan accent */
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.toggle-btn {
-    background: none;
-    border: none;
-    color: #666;
-    cursor: pointer;
-    transition: color 0.2s;
-}
-.toggle-btn:hover { color: #fff; }
-
-#panel-content { padding: 20px; }
-
-.control-section { margin-bottom: 20px; }
-
-.control-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    font-weight: 600;
-    color: #888;
-    margin-bottom: 8px;
-    text-transform: uppercase;
-}
-
-.control-value { color: #4fc3f7; }
-
-/* Custom Range Slider */
-input[type="range"] {
-    -webkit-appearance: none;
-    width: 100%;
-    height: 4px;
-    background: #333;
-    border-radius: 2px;
-    outline: none;
-}
-input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: #4fc3f7;
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 0 10px rgba(79, 195, 247, 0.4);
-    transition: transform 0.1s;
-}
-input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-/* Custom Select */
-select {
-    width: 100%;
-    padding: 10px;
-    background: #222;
-    border: 1px solid #333;
-    color: #eee;
-    border-radius: 6px;
-    outline: none;
-    cursor: pointer;
-}
-
-/* Checkbox */
-.checkbox-control {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-}
-.checkbox-control input { accent-color: #4fc3f7; }
-
-.button-group { display: flex; gap: 10px; }
-
-button {
-    flex: 1;
-    padding: 10px;
-    background: #25252a;
-    border: 1px solid #333;
-    color: #ccc;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-button:hover { background: #333; color: white; border-color: #555; }
-
-.divider {
-    height: 1px;
-    background: #333;
-    margin: 20px 0;
-}
-
-.info-box {
-    margin-top: 15px;
-    padding: 12px;
-    background: rgba(79, 195, 247, 0.05);
-    border: 1px dashed rgba(79, 195, 247, 0.2);
-    border-radius: 6px;
-    font-size: 11px;
-    color: #777;
-    line-height: 1.6;
-}
+:root { color-scheme: dark; font: 14px/1.6 system-ui, sans-serif; color: #d9e3e7; background: #0b1014; accent-color: #6dd8c0; }
+input[type=number] { width: 100%; background: #121c23; color: #d9e3e7; border: 1px solid #30404a; border-radius: 6px; padding: 7px; }
+.guide { border-top: 1px solid #263139; margin-top: 24px; padding-top: 12px; color: #a8bac4; }
+.guide h2 { font-size: 15px; color: #d9e3e7; } .guide strong { color: #d9e3e7; }
+* { box-sizing: border-box; } body { margin: 0; }
+header { padding: 22px 30px; border-bottom: 1px solid #263139; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+h1 { font-size: 19px; letter-spacing: -.5px; margin: 0; } h1 span, .muted { color: #8b9da7; } #status { color: #6dd8c0; font-size: 12px; }
+main { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: calc(100vh - 76px); } aside { padding: 24px; border-right: 1px solid #263139; }
+label { display: block; margin: 17px 0 7px; font-size: 12px; color: #a8bac4; } label:first-child { margin-top: 0; } output { font-variant-numeric: tabular-nums; } label output { float: right; color: #d9e3e7; }
+select, button { font: inherit; border: 1px solid #30404a; border-radius: 6px; background: #121c23; color: #d9e3e7; padding: 8px 11px; }
+select, input[type=range] { width: 100%; } button, summary, select { cursor: pointer; } button:hover { background: #21313b; } button[aria-pressed=true] { background: #173a35; border-color: #6dd8c0; color: #a4f1df; }
+:focus-visible { outline: 2px solid #6dd8c0; outline-offset: 4px; } input:disabled { opacity: .35; } .buttons { display: flex; gap: 8px; margin-top: 22px; } .buttons button { flex: 1; }
+.check { display: flex; align-items: center; gap: 8px; } p { font-size: 12px; } #experiment { min-height: 58px; color: #9ab0bd; } details { font-size: 12px; border-top: 1px solid #263139; padding-top: 16px; } code { font-size: 11px; color: #8dd6c6; }
+.workspace { padding: 28px; align-self: center; min-width: 0; } nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+.tunnel { width: 100%; aspect-ratio: 2; border: 1px solid #30404a; background: #0c151d; overflow: hidden; border-radius: 8px; } canvas { display: block; width: 100%; height: 100%; }
+.legend { display: flex; align-items: center; gap: 12px; margin: 18px 0; font-size: 12px; color: #9ab0bd; flex-wrap: wrap; } #legendBar { width: 120px; height: 6px; border-radius: 4px; }
+.readouts { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid #263139; padding-top: 16px; font: 11px/1.8 ui-monospace, monospace; color: #a8bac4; }
+@media (max-width: 780px) { header { padding: 16px; } main { display: flex; flex-direction: column; } .workspace { order: -1; padding: 16px; width: 100%; } aside { border-right: 0; border-top: 1px solid #263139; padding: 20px; } #experiment { min-height: 0; } nav { margin-bottom: 16px; } }

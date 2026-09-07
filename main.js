@@ -1,331 +1,188 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-// --- CONFIGURATION ---
-const CONFIG = {
-    particleCount: 8000,
-    // We store km/h directly now, but convert to internal units for physics
-    windKmh: 100.0, 
-    domainSize: { x: 30, y: 15, z: 15 }, 
-    autoRotate: false,
-    pause: false
+import { bodyAt, speedToKmh } from './solver.mjs';
+const $ = id => document.getElementById(id);
+const canvas = $('canvas'), ctx = canvas.getContext('2d', { alpha: false });
+const fieldCanvas = document.createElement('canvas'), fieldCtx = fieldCanvas.getContext('2d');
+const descriptions = {
+  airfoil: 'NACA 0018 section. Compare acceleration and static pressure; vary incidence.',
+  venturi: 'A smooth contraction and diffuser. Inspect throat acceleration and pressure drop.',
+  coanda: 'A slot jet beside a rounded wall. Explore entrainment, attachment and separation.',
+  cylinder: 'Watch the wake develop. Shedding depends on Reynolds number and resolution.',
+  plate: 'An inclined plate. Compare blockage, separation and the downstream wake.',
+  empty: 'A no-slip channel. Boundary layers develop from the uniform inlet.'
 };
-
-// --- GLOBAL VARIABLES ---
-let scene, camera, renderer, controls;
-let particlesMesh;
-let dummy = new THREE.Object3D(); 
-let particleData = []; 
-let obstacleMesh;
-let currentShapeType = 'wing';
-
-const container = document.getElementById('canvas-container');
-
-// Map km/h to simulation speed (approx 0.1 to 3.0 internal units)
-const kmhToSim = (kmh) => Math.max(0.1, kmh / 60.0);
-
-init();
-animate();
-
-function init() {
-    // 1. Setup Scene
-    scene = new THREE.Scene();
-    // Lighter fog for a "Lab" feel rather than "Void"
-    scene.fog = new THREE.FogExp2(0x111116, 0.015); 
-    scene.background = new THREE.Color(0x111116);
-
-    // 2. Setup Camera
-    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(10, 6, 15);
-
-    // 3. Setup Renderer (High Quality)
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for performance
-    container.appendChild(renderer.domElement);
-
-    // 4. Controls
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.maxDistance = 40;
-
-    // 5. Lighting (Much Brighter / Better illuminated)
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 2.0);
-    hemiLight.position.set(0, 20, 0);
-    scene.add(hemiLight);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = false; // Shadow disabled for performance
-    scene.add(dirLight);
-
-    // 6. Tunnel & Objects
-    createTunnelWalls();
-    createObstacle('wing');
-    initParticles();
-
-    // 7. Events
-    window.addEventListener('resize', onWindowResize);
-    setupUI();
+let worker, generation = 0, pending = false, paused = false, failed = false;
+let width = 0, height = 0, solid, image, frame, view = 'flow', previousSteps = 0, dirty = true, config;
+let requestedConfig = null, latticeSpeed = 0.055, metres = 0.01, seconds = 0.0001, outlineDirty = true;
+const outline = document.createElement('canvas'), outlineCtx = outline.getContext('2d');
+function speedLabel(value) { return $('units').value === 'kmh' ? `${speedToKmh(value, metres, seconds).toFixed(2)} km/h` : `${value.toFixed(3)} lu/ts`; }
+function speedControl() {
+  const factor = $('units').value === 'kmh' ? speedToKmh(1, metres, seconds) : 1;
+  $('speed').max = 0.09 * factor; $('speed').step = 0.001 * factor; $('speed').value = latticeSpeed * factor;
+  $('speedValue').textContent = speedLabel(latticeSpeed); dirty = true;
 }
-
-function createTunnelWalls() {
-    const d = CONFIG.domainSize;
-    const geometry = new THREE.BoxGeometry(d.x, d.y, d.z);
-    const edges = new THREE.EdgesGeometry(geometry);
-    // Lighter grid lines
-    const material = new THREE.LineBasicMaterial({ color: 0x555566, opacity: 0.2, transparent: true });
-    const wireframe = new THREE.LineSegments(edges, material);
-    scene.add(wireframe);
-
-    // Floor
-    const gridHelper = new THREE.GridHelper(d.x, 20, 0x555566, 0x22222a);
-    gridHelper.position.y = -d.y / 2;
-    gridHelper.scale.x = 1;
-    scene.add(gridHelper);
+const particles = new Float32Array(1600 * 2);
+function readControls() {
+  const c = { width: Number($('quality').value), shape: $('shape').value, speed: latticeSpeed, viscosity: Number($('viscosity').value), angle: Number($('angle').value), heat: Number($('heat').value), source: $('source').value, fanX: Number($('fanX').value), fanY: Number($('fanY').value), direction: Number($('direction').value) };
+  $('speedValue').textContent = speedLabel(c.speed);
+  for (const id of ['fanX', 'fanY', 'direction']) { $(id).disabled = c.source !== 'fan'; $(id + 'Value').textContent = id === 'direction' ? c[id] + '°' : Math.round(c[id] * 100) + '%'; }
+  $('viscosityValue').textContent = c.viscosity.toFixed(3) + ' lu²/ts';
+  $('angleValue').textContent = c.angle + '°'; $('heatValue').textContent = c.heat + ' °C';
+  $('angle').disabled = !['airfoil', 'plate'].includes(c.shape); $('experiment').textContent = descriptions[c.shape];
+  return c;
 }
-
-function createObstacle(type) {
-    if (obstacleMesh) {
-        scene.remove(obstacleMesh);
-        if(obstacleMesh.geometry) obstacleMesh.geometry.dispose();
-    }
-
-    // Material: Sleek aerodynamic white/grey
-    const material = new THREE.MeshStandardMaterial({
-        color: 0xeeeeee,
-        metalness: 0.6,
-        roughness: 0.3,
-        emissive: 0x222222,
-    });
-
-    let geometry;
-
-    if (type === 'sphere') {
-        geometry = new THREE.SphereGeometry(2.5, 32, 32);
-    } 
-    else if (type === 'cube') {
-        geometry = new THREE.BoxGeometry(3.5, 3.5, 3.5);
-    }
-    else if (type === 'car') {
-        // Simple "Car" shape using combined boxes
-        geometry = new THREE.BoxGeometry(4, 1.5, 2);
-        const top = new THREE.BoxGeometry(2, 1, 1.8);
-        top.translate(-0.5, 1.25, 0);
-        // Merging logic is complex in vanilla Three, sticking to simple group or just a box approximation for now
-        // For simplicity in this script, we'll use a "blocky" car shape via a single geometry if possible, 
-        // or just revert to a box if too complex. Let's do a fast "Slope" for car:
-        const shape = new THREE.Shape();
-        shape.moveTo(0,0); shape.lineTo(4,0); shape.lineTo(4,1); shape.lineTo(3,1.5); shape.lineTo(1,1.5); shape.lineTo(0,0.8);
-        const extrudeSettings = { steps: 1, depth: 2.2, bevelEnabled: true, bevelThickness:0.1 };
-        geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        geometry.center();
-        geometry.rotateZ(Math.PI); // Fix orientation
-        geometry.rotateY(Math.PI);
-    }
-    else { // Wing
-        const shape = new THREE.Shape();
-        const chord = 5;
-        const thickness = 0.8;
-        shape.moveTo(chord/2, 0);
-        shape.bezierCurveTo(chord/2, thickness, -chord/2, thickness/2, -chord/2, 0);
-        shape.bezierCurveTo(-chord/2, -thickness/2, chord/2, -thickness, chord/2, 0);
-
-        const extrudeSettings = { steps: 2, depth: 8, bevelEnabled: false };
-        geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-        geometry.center(); 
-        geometry.rotateY(Math.PI / 2); 
-    }
-
-    obstacleMesh = new THREE.Mesh(geometry, material);
-    scene.add(obstacleMesh);
+function fail(message) { failed = true; pending = false; $('status').textContent = message; }
+function reset() {
+  config = readControls(); requestedConfig = null; outlineDirty = true; generation++; failed = false; pending = true; frame = null; previousSteps = 0;
+  $('status').textContent = 'Initializing…'; $('metrics').textContent = 'Initializing…';
+  $('probe').textContent = 'Point at the field to inspect velocity, pressure and temperature.';
+  worker?.terminate();
+  try {
+    worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    worker.onerror = () => fail('Could not load solver. Serve this folder over HTTP, not file://.');
+    worker.onmessage = ({ data }) => {
+      if (data.id !== generation) return;
+      if (data.type === 'error') { fail(data.message); return; }
+      if (data.type === 'geometry') { outlineDirty ||= config.angle !== data.config.angle; solid = data.solid; config = data.config; return; }
+      if (data.type === 'ready') {
+        ({ width, height, solid } = data);
+        fieldCanvas.width = width; fieldCanvas.height = height; image = fieldCtx.createImageData(width, height);
+        for (let p = 0; p < particles.length; p += 2) spawn(p, true);
+        return;
+      }
+      pending = false; frame = data; dirty = true; $('status').textContent = paused ? 'Paused' : 'Live · laminar solver';
+    };
+    worker.postMessage({ type: 'init', id: generation, config });
+  } catch { fail('Worker unavailable. Serve this folder over HTTP in a modern browser.'); }
 }
-
-function initParticles() {
-    if (particlesMesh) {
-        scene.remove(particlesMesh);
-        particlesMesh.geometry.dispose();
-        particlesMesh.material.dispose();
+function spawn(p, throughout = false) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    particles[p] = throughout ? 1 + Math.random() * (width - 3) : 1 + Math.random() * 3;
+    particles[p + 1] = config.shape === 'coanda' ? height * (0.325 + Math.random() * 0.07) : 2 + Math.random() * (height - 4);
+    if (config.source === 'fan') {
+      const a = config.direction * Math.PI / 180, spread = (Math.random() - 0.5) * height * 0.16;
+      particles[p] = Math.max(1, Math.min(width - 2, config.fanX * (width - 1) - Math.sin(a) * spread));
+      particles[p + 1] = Math.max(1, Math.min(height - 2, config.fanY * (height - 1) + Math.cos(a) * spread));
     }
-
-    // 1. Create the geometry
-    const geometry = new THREE.BoxGeometry(0.8, 0.05, 0.05); 
-    
-    // --- ADD THIS LINE TO FIX ROTATION ---
-    geometry.rotateY(Math.PI / 2); 
-    // -------------------------------------
-
-    const material = new THREE.MeshBasicMaterial({ 
-        color: 0x00ffff, 
-        transparent: true, 
-        opacity: 0.15,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false 
-    });
-
-    particlesMesh = new THREE.InstancedMesh(geometry, material, CONFIG.particleCount);
-    particlesMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(particlesMesh);
-
-    particleData = [];
-    const d = CONFIG.domainSize;
-
-    for (let i = 0; i < CONFIG.particleCount; i++) {
-        const x = (Math.random() - 0.5) * d.x;
-        const y = (Math.random() - 0.5) * d.y * 0.8;
-        const z = (Math.random() - 0.5) * d.z * 0.8;
-        
-        particleData.push({
-            position: new THREE.Vector3(x, y, z),
-            velocity: new THREE.Vector3(0,0,0),
-            // Randomize speed slightly to prevent "stuttering" patterns
-            speedOffset: 0.8 + Math.random() * 0.4, 
-            life: Math.random() // Used for flicker
-        });
+    if (!solid[(particles[p] | 0) + (particles[p + 1] | 0) * width]) return;
+  }
+}
+const stops = [[15, 28, 62], [30, 107, 159], [59, 186, 177], [238, 213, 116], [225, 88, 69]];
+const palette = new Uint8Array(256 * 3), bodyColor = [188, 200, 205], background = [12, 21, 29];
+for (let i = 0; i < 256; i++) {
+  const t = i / 255 * 4, a = Math.min(3, Math.floor(t)), f = t - a;
+  for (let c = 0; c < 3; c++) palette[i * 3 + c] = stops[a][c] * (1 - f) + stops[a + 1][c] * f;
+}
+function sample(f, x, y, c) {
+  const ix = x | 0, iy = y | 0, j = (ix + iy * width) * 4, fx = x - ix, fy = y - iy;
+  return (1 - fy) * ((1 - fx) * f[j + c] + fx * f[j + 4 + c]) + fy * ((1 - fx) * f[j + width * 4 + c] + fx * f[j + width * 4 + 4 + c]);
+}
+function render() {
+  const f = frame.fields, pixels = image.data;
+  const speedMax = Math.max(0.01, config.speed * 3), pressureMax = Math.max(0.0002, 2 * config.speed ** 2);
+  const tMin = Math.min(20, config.heat), tMax = Math.max(21, config.heat);
+  for (let i = 0; i < solid.length; i++) {
+    const j = i * 4;
+    let value = Math.hypot(f[j], f[j + 1]) / speedMax;
+    if (view === 'pressure') value = 0.5 + f[j + 2] / (2 * pressureMax);
+    if (view === 'temperature') value = (f[j + 3] - tMin) / (tMax - tMin);
+    const color = Math.round(Math.max(0, Math.min(1, value)) * 255) * 3;
+    for (let c = 0; c < 3; c++) pixels[j + c] = view === 'natural' ? background[c] : palette[color + c];
+    pixels[j + 3] = 255;
+  }
+  fieldCtx.putImageData(image, 0, 0); ctx.drawImage(fieldCanvas, 0, 0, canvas.width, canvas.height);
+  const elapsed = frame.steps - previousSteps, sx = canvas.width / width, sy = canvas.height / height;
+  if ($('tracers').checked) {
+    ctx.beginPath(); ctx.strokeStyle = view === 'natural' ? '#dceaf080' : '#ffffff70'; ctx.lineWidth = Math.max(0.7, canvas.width / 1500);
+    for (let p = 0; p < particles.length; p += 2) {
+      let x = particles[p], y = particles[p + 1];
+      const startX = x, startY = y;
+      let alive = true;
+      // Sub-cell integration prevents tracers crossing thin obstacles.
+      for (let t = 0; t < elapsed; t++) {
+        const ix = x | 0, iy = y | 0;
+        if (ix < 1 || ix >= width - 1 || iy < 1 || iy >= height - 1 || solid[ix + iy * width]) { alive = false; break; }
+        const u = sample(f, x, y, 0), v = sample(f, x, y, 1); x += u; y += v;
+      }
+      if (!alive || x >= width - 1 || y >= height - 1 || x < 1 || y < 1 || solid[(x | 0) + (y | 0) * width]) { spawn(p); continue; }
+      particles[p] = x; particles[p + 1] = y;
+      const j = ((x | 0) + (y | 0) * width) * 4;
+      ctx.moveTo((elapsed ? startX : x - f[j] * 18) * sx, (elapsed ? startY : y - f[j + 1] * 18) * sy); ctx.lineTo(x * sx, y * sy);
     }
-}
-
-function updateParticles() {
-    if (CONFIG.pause) return;
-
-    const simSpeed = kmhToSim(CONFIG.windKmh);
-    const obstaclePos = obstacleMesh.position;
-    const d = CONFIG.domainSize;
-    
-    // Collision Settings
-    let radius = 2.5; 
-    let repulsionStrength = 0.8;
-    if (currentShapeType === 'wing') { radius = 1.8; repulsionStrength = 0.6; }
-    if (currentShapeType === 'sphere') { radius = 2.8; repulsionStrength = 1.2; }
-
-    const objMatrix = new THREE.Matrix4();
-    
-    for (let i = 0; i < CONFIG.particleCount; i++) {
-        const p = particleData[i];
-        
-        // 1. Basic Wind Movement
-        // Speed increases slightly if particles are squeezed around object (Venturi effect fake)
-        let currentSpeed = simSpeed * p.speedOffset;
-
-        // 2. Obstacle Avoidance (Potential Flow Approximation)
-        const dist = p.position.distanceTo(obstaclePos);
-        
-        if (dist < radius * 3.0) {
-            // Push away
-            const repulsion = p.position.clone().sub(obstaclePos).normalize();
-            
-            // Force strength falls off with distance
-            const force = (1.0 - (dist / (radius * 3.0))) * repulsionStrength * currentSpeed;
-            
-            // Wing specific: less lateral deflection
-            if (currentShapeType === 'wing') {
-                repulsion.z *= 0.1;
-                repulsion.x *= 0.2; 
-            }
-            
-            // Add repulsion to velocity (fake diversion)
-            p.velocity.set(currentSpeed, 0, 0).add(repulsion.multiplyScalar(force * 2));
-            
-            // Accelerate near object (Bernoulli principle visual fake)
-            currentSpeed *= 1.1;
-        } else {
-            // Default smooth laminar flow
-            // Add slight sine wave for "turbulence" far downstream
-            if (p.position.x > 2.0) {
-                p.velocity.set(currentSpeed, Math.sin(p.position.x * 0.5 + p.life * 10)*0.05, 0);
-            } else {
-                p.velocity.set(currentSpeed, 0, 0);
-            }
-        }
-
-        // 3. Move
-        p.position.add(p.velocity);
-
-        // 4. Recycle
-        if (p.position.x > d.x / 2) {
-            p.position.x = -d.x / 2;
-            p.position.y = (Math.random() - 0.5) * d.y * 0.8;
-            p.position.z = (Math.random() - 0.5) * d.z * 0.8;
-        }
-
-        // 5. Update Visuals
-        dummy.position.copy(p.position);
-        
-        // Stretch: The faster it goes, the longer the "vapor trail"
-        // At 300km/h, lines should be very long
-        const stretch = Math.max(1.0, currentSpeed * 4.0);
-        dummy.scale.set(stretch, 1, 1);
-        
-        // Look ahead
-        const lookTarget = p.position.clone().add(p.velocity);
-        dummy.lookAt(lookTarget);
-        
-        dummy.updateMatrix();
-        particlesMesh.setMatrixAt(i, dummy.matrix);
+    ctx.stroke();
+  }
+  previousSteps = frame.steps;
+  if (outlineDirty) {
+    outline.width = Math.min(1800, Math.max(width * 2, canvas.width)); outline.height = outline.width / 2;
+    const mask = outlineCtx.createImageData(outline.width, outline.height);
+    for (let y = 0; y < outline.height; y++) for (let x = 0; x < outline.width; x++) {
+      let coverage = 0;
+      for (const dx of [0.25, 0.75]) for (const dy of [0.25, 0.75]) {
+        const X = (x + dx) / outline.height, Y = (y + dy) / outline.height;
+        if (Y < 0.5 / height || Y > 1 - 1.5 / height || bodyAt(X, Y, config.shape, config.angle)) coverage++;
+      }
+      const j = (x + y * outline.width) * 4;
+      mask.data[j] = bodyColor[0]; mask.data[j + 1] = bodyColor[1]; mask.data[j + 2] = bodyColor[2]; mask.data[j + 3] = coverage * 255 / 4;
     }
-    
-    particlesMesh.instanceMatrix.needsUpdate = true;
+    outlineCtx.putImageData(mask, 0, 0); outlineDirty = false;
+  }
+  ctx.drawImage(outline, 0, 0, canvas.width, canvas.height);
+  if (config.source === 'fan') {
+    ctx.save(); ctx.translate(config.fanX * (width - 1) * sx, config.fanY * (height - 1) * sy); ctx.rotate(config.direction * Math.PI / 180);
+    const size = canvas.height * 0.07;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(0, size); ctx.moveTo(0, 0); ctx.lineTo(size, 0); ctx.lineTo(size * 0.6, -size * 0.3); ctx.moveTo(size, 0); ctx.lineTo(size * 0.6, size * 0.3); ctx.stroke(); ctx.restore();
+  }
+  $('metrics').textContent = `${width} × ${height} · t ${frame.steps} ts · Re ${frame.reynolds.toFixed(1)} · max Ma ${(frame.maxSpeed * Math.sqrt(3)).toFixed(3)}`;
+  $('legendBar').style.background = view === 'natural' ? '#91a8b5' : 'linear-gradient(90deg, rgb(15,28,62), rgb(30,107,159), rgb(59,186,177), rgb(238,213,116), rgb(225,88,69))';
+  $('legendLabel').textContent = { flow: 'Speed', natural: 'Visible smoke', temperature: 'Temperature', pressure: 'Gauge pressure' }[view];
+  $('legendRange').textContent = { flow: `0 — ${speedLabel(speedMax)}`, natural: 'Air itself is invisible', temperature: `${tMin} — ${tMax} °C`, pressure: `±${pressureMax.toFixed(4)} ρ₀·lu²/ts²` }[view];
+  dirty = false;
 }
-
-function animate() {
-    requestAnimationFrame(animate);
-    updateParticles();
-    if (CONFIG.autoRotate) {
-        controls.autoRotate = true;
-        controls.update();
-    }
-    renderer.render(scene, camera);
+function tick() {
+  if (frame && dirty) render();
+  if (worker && frame && !pending && !failed && !document.hidden) {
+    if (requestedConfig) { pending = true; worker.postMessage({ type: 'update', id: generation, config: requestedConfig }); requestedConfig = null; }
+    else if (!paused) { pending = true; worker.postMessage({ type: 'step', id: generation, budget: Number($('playback').value) * 12 }); }
+  }
+  requestAnimationFrame(tick);
 }
-
-function setupUI() {
-    // Inputs
-    const speedInput = document.getElementById('windSpeed');
-    const shapeSelect = document.getElementById('shapeSelect');
-    const particleInput = document.getElementById('particleCount');
-    const rotateToggle = document.getElementById('rotateToggle');
-    const resetCamBtn = document.getElementById('resetCam');
-    const pauseBtn = document.getElementById('pauseBtn');
-
-    // Display elements
-    const speedVal = document.getElementById('speedValue');
-    const countVal = document.getElementById('countValue');
-
-    speedInput.addEventListener('input', (e) => {
-        CONFIG.windKmh = parseInt(e.target.value);
-        speedVal.textContent = CONFIG.windKmh + ' km/h';
-    });
-
-    shapeSelect.addEventListener('change', (e) => {
-        currentShapeType = e.target.value;
-        createObstacle(currentShapeType);
-    });
-
-    particleInput.addEventListener('input', (e) => {
-        CONFIG.particleCount = parseInt(e.target.value);
-        countVal.textContent = CONFIG.particleCount;
-        initParticles();
-    });
-
-    rotateToggle.addEventListener('change', (e) => {
-        CONFIG.autoRotate = e.target.checked;
-        controls.autoRotate = e.target.checked;
-    });
-
-    resetCamBtn.addEventListener('click', () => {
-        camera.position.set(10, 6, 15);
-        camera.lookAt(0,0,0);
-        controls.reset();
-    });
-
-    pauseBtn.addEventListener('click', () => {
-        CONFIG.pause = !CONFIG.pause;
-        pauseBtn.innerHTML = CONFIG.pause ? '<i class="fas fa-play"></i> Play' : '<i class="fas fa-pause"></i> Pause';
-    });
+new ResizeObserver(() => {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr)); canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr)); dirty = true; outlineDirty = true;
+}).observe(canvas);
+for (const id of ['shape', 'quality']) $(id).addEventListener('change', reset);
+for (const id of ['speed', 'viscosity', 'angle', 'heat', 'source', 'fanX', 'fanY', 'direction']) $(id).addEventListener('input', () => {
+  if (id === 'speed') latticeSpeed = Math.max(0, Math.min(0.09, Number($('speed').value) / ($('units').value === 'kmh' ? speedToKmh(1, metres, seconds) : 1)));
+  requestedConfig = readControls();
+});
+$('units').onchange = speedControl;
+for (const id of ['metres', 'seconds']) $(id).addEventListener('input', () => {
+  if (!$('metres').checkValidity() || !$('seconds').checkValidity() || !Number($('metres').value) || !Number($('seconds').value)) { $('scaleNote').textContent = 'Enter positive scales within the allowed range.'; return; }
+  metres = Number($('metres').value); seconds = Number($('seconds').value); speedControl();
+  $('scaleNote').textContent = `1 lu/ts = ${speedToKmh(1, metres, seconds).toPrecision(5)} km/h. Chosen scale, not calibrated air.`;
+});
+$('playback').oninput = () => { $('playbackValue').textContent = $('playback').value + '×'; };
+$('reset').onclick = reset;
+$('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; $('pause').setAttribute('aria-pressed', String(paused)); if (!failed) $('status').textContent = paused ? 'Paused' : 'Live · laminar solver'; };
+$('tracers').onchange = () => { dirty = true; };
+document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
+  view = button.dataset.view; dirty = true;
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+  $('viewNote').textContent = { flow: 'Smoke follows computed velocity. Colors show speed; legends saturate outside their fixed range.', natural: 'Human-eye-like view: air is invisible; optional seeded smoke reveals its motion.', temperature: 'Heat is advected and diffused from the surface. No compression heating or buoyancy.', pressure: 'Static pressure relative to the mean outlet. Blue is lower; red is higher. Not a Bernoulli-derived color effect.' }[view];
+});
+let probeX = 1, probeY = 1;
+function probe(x, y) {
+  if (!frame) return;
+  x = probeX = Math.max(0, Math.min(width - 1, x)); y = probeY = Math.max(0, Math.min(height - 1, y));
+  const i = x + y * width, j = i * 4, f = frame.fields;
+  $('probe').textContent = solid[i] ? `Solid · T ${f[j + 3].toFixed(1)} °C` : `(${x}, ${y}) · |u| ${speedLabel(Math.hypot(f[j], f[j + 1]))} · Δp ${f[j + 2].toFixed(5)} · T ${f[j + 3].toFixed(1)} °C`;
 }
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
+canvas.addEventListener('pointermove', event => {
+  const r = canvas.getBoundingClientRect();
+  probe(Math.floor((event.clientX - r.left) / r.width * width), Math.floor((event.clientY - r.top) / r.height * height));
+});
+canvas.addEventListener('keydown', event => {
+  const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+  if (!move) return;
+  event.preventDefault(); probe(probeX + move[0], probeY + move[1]);
+});
+reset(); requestAnimationFrame(tick);
