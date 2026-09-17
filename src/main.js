@@ -49,8 +49,9 @@ function reset() {
         outline.width = width * 3; outline.height = height * 3;
         for (let p = 0; p < particles.length; p += 2) spawn(p, true);
         $('status').textContent = 'ready · C++/WASM · float64';
-        pending = false;
         outlineDirty = true;
+        pending = true;
+        worker.postMessage({ type: 'step', id: generation, budget: 12 });
         return;
       }
       pending = false; frame = data; dirty = true; $('status').textContent = paused ? 'paused' : 'ready · C++/WASM · float64';
