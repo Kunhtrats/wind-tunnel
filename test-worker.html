@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Worker Test</title>
+<style>body{font:14px monospace;padding:20px;background:#000;color:#0f0}
+.error{color:#f00}.warn{color:#ff0}</style>
+</head><body><h1>Testing Worker + WASM...</h1>
+<button onclick="testDirect()">Test Direct WASM</button>
+<button onclick="testWorker()">Test Worker</button>
+<pre id="out"></pre><script type="module">
+const log=(s,c='')=>{const p=document.createElement('div');p.className=c;p.textContent=s;document.getElementById('out').appendChild(p);console.log(s)};
+
+window.testDirect=async()=>{
+  document.getElementById('out').innerHTML='';
+  log('=== DIRECT WASM TEST ===');
+  try{
+    log('1. Importing wasm-solver.mjs...');
+    const mod=await import('./wasm-solver.mjs?t='+Date.now());
+    log('✓ Module loaded');
+    log('2. Creating Solver...');
+    const s=new mod.Solver({width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0});
+    log('✓ Solver: '+s.width+'x'+s.height);
+    log('3. Running step...');
+    s.step();
+    log('✓ Steps: '+s.steps);
+    log('SUCCESS! Direct WASM works.','');
+    s.dispose();
+  }catch(e){log('ERROR: '+e.message,'error');log(e.stack,'error');}
+};
+
+window.testWorker=()=>{
+  document.getElementById('out').innerHTML='';
+  log('=== WORKER TEST ===');
+  try{
+    log('1. Creating Worker...');
+    const w=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
+    log('✓ Worker created');
+    
+    w.onerror=(e)=>{log('Worker error: '+e.message,'error');};
+    w.onmessage=({data})=>{
+      log('Worker message: '+JSON.stringify(data).substr(0,200));
+      if(data.type==='ready'){log('✓ Worker is READY!','');}
+      else if(data.type==='error'){log('Worker error: '+data.message,'error');}
+      else if(data.type==='frame'){log('✓ Got frame! Steps: '+data.steps,'');}
+    };
+    
+    log('2. Sending init message...');
+    w.postMessage({type:'init',id:1,config:{width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0}});
+    log('Waiting for worker response...');
+  }catch(e){log('ERROR: '+e.message,'error');log(e.stack,'error');}
+};
+
+// Auto-test direct on load
+setTimeout(testDirect,100);
+</script></body></html>

@@ -1,14 +1,30 @@
-import { Solver } from './solver.mjs';
+import { Solver } from './wasm-solver.mjs';
 let solver;
-self.onmessage = ({ data }) => {
+
+console.log('[Worker] Starting...');
+
+self.onmessage = async ({ data }) => {
+  console.log('[Worker] Received message:', data.type);
   try {
+    if (!data || typeof data !== 'object') throw new Error('Invalid solver request.');
     if (data.type === 'init') {
-      solver = new Solver(data.config);
-      self.postMessage({ type: 'ready', id: data.id, width: solver.width, height: solver.height, solid: solver.solid });
+      console.log('[Worker] Initializing solver...');
+      const replacement = new Solver(data.config);
+      console.log('[Worker] Waiting for solver to be ready...');
+      await replacement.ready;
+      console.log('[Worker] Solver ready:', replacement.width, 'x', replacement.height);
+      solver?.dispose(); 
+      solver = replacement;
+      console.log('[Worker] Getting solid array...');
+      const solidArray = solver.solid.slice();
+      console.log('[Worker] Sending ready message...');
+      self.postMessage({ type: 'ready', id: data.id, width: solver.width, height: solver.height, solid: solidArray });
+      console.log('[Worker] Ready message sent');
+      return;
     } else if (!solver || !['step', 'update'].includes(data.type)) throw new Error('Invalid solver request.');
     if (data.type === 'update') {
       solver.update(data.config);
-      self.postMessage({ type: 'geometry', id: data.id, solid: solver.solid, config: data.config });
+      self.postMessage({ type: 'geometry', id: data.id, solid: solver.solid.slice(), config: data.config });
     }
     const start = performance.now();
     if (data.type === 'step') {
@@ -17,5 +33,10 @@ self.onmessage = ({ data }) => {
     }
     const frame = solver.snapshot();
     self.postMessage({ type: 'frame', id: data.id, ...frame }, [frame.fields.buffer]);
-  } catch (error) { self.postMessage({ type: 'error', id: data.id, message: error.message }); }
+  } catch (error) { 
+    console.error('[Worker] Error:', error.message, error.stack);
+    self.postMessage({ type: 'error', id: data?.id, message: error.message }); 
+  }
 };
+
+console.log('[Worker] Message handler installed');

@@ -1,53 +1,39 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Flow Lab · 2D</title><link rel="stylesheet" href="style.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Wind Tunnel · CFD</title><link rel="stylesheet" href="./style.css"></head>
 <body>
-<header><h1>Flow Lab <span>/ 2D wind tunnel</span></h1><span id="status" role="status">Initializing…</span></header>
+<header><h1>Wind Tunnel</h1><span id="status" role="status">init</span></header>
 <main>
 <aside aria-label="Simulation controls">
-<label for="shape">Experiment</label><select id="shape"><option value="airfoil">Airfoil · Bernoulli</option><option value="venturi">Venturi duct</option><option value="coanda">Coandă wall jet</option><option value="cylinder">Cylinder · wake</option><option value="plate">Flat plate</option><option value="empty">Empty tunnel</option></select>
+<label for="shape">Shape</label><select id="shape"><option value="airfoil">Airfoil</option><option value="venturi">Venturi</option><option value="coanda">Coandă</option><option value="cylinder">Cylinder</option><option value="plate">Plate</option><option value="empty">Empty</option></select>
 <p id="experiment"></p>
-<label for="units">Speed units</label><select id="units"><option value="lattice">lu/ts</option><option value="kmh">km/h</option></select>
-<label for="speed">Wind speed <output id="speedValue"></output></label><input id="speed" type="range" min="0" max="0.09" step="0.001" value="0.055">
-<details><summary>Physical scale for km/h</summary><label for="metres">Metres / lattice cell</label><input id="metres" type="number" min="0.000001" max="1000" step="any" value="0.01"><label for="seconds">Seconds / timestep</label><input id="seconds" type="number" min="0.000001" max="1000" step="any" value="0.0001"><p id="scaleNote">km/h = lu/ts × metres/cell ÷ seconds/step × 3.6. This is a chosen scale, not a calibrated air model.</p></details>
-<label for="playback">Simulation pace <output id="playbackValue">4×</output></label><input id="playback" type="range" min="1" max="8" step="1" value="4">
-<label for="source">Wind source</label><select id="source"><option value="fan" selected>Movable fan</option><option value="tunnel">Tunnel inlet / preset jet</option></select>
-<label for="fanX">Fan horizontal position <output id="fanXValue"></output></label><input id="fanX" type="range" min="0.03" max="0.97" step="0.01" value="0.06">
-<label for="fanY">Fan vertical position <output id="fanYValue"></output></label><input id="fanY" type="range" min="0.08" max="0.92" step="0.01" value="0.5">
-<label for="direction">Fan direction <output id="directionValue"></output></label><input id="direction" type="range" min="-180" max="180" step="1" value="0">
-<p class="muted">0° → right, +90° ↓ down. Move the fan with these sliders; solid cells block its active area.</p>
+<label for="speed">Speed <output id="speedValue"></output></label><input id="speed" type="range" min="0" max="0.09" step="0.001" value="0.055">
 <label for="viscosity">Viscosity <output id="viscosityValue"></output></label><input id="viscosity" type="range" min="0.02" max="0.12" step="0.005" value="0.04">
-<label for="angle">Incidence <output id="angleValue"></output></label><input id="angle" type="range" min="-20" max="20" step="1" value="5">
-<label for="heat">Surface temperature <output id="heatValue"></output></label><input id="heat" type="range" min="0" max="100" step="5" value="60">
-<label for="quality">Resolution</label><select id="quality"><option value="192">Fast · 192 × 96</option><option value="288" selected>Balanced · 288 × 144</option><option value="384">Fine · 384 × 192</option><option value="576">Ultra · 576 × 288</option></select>
+<label for="angle">Angle <output id="angleValue"></output></label><input id="angle" type="range" min="-20" max="20" step="1" value="5">
+<label for="quality">Resolution</label><select id="quality"><option value="192">192×96</option><option value="288" selected>288×144</option><option value="384">384×192</option><option value="576">576×288</option></select>
 <div class="buttons"><button id="pause" aria-pressed="false">Pause</button><button id="reset">Reset</button></div>
-<label class="check"><input id="tracers" type="checkbox" checked> Smoke tracers</label>
-<p class="muted">Controls update live and preserve the wake. Only experiment and resolution changes restart. Point at the tunnel to inspect the field.</p>
-<details><summary>Physics & limits</summary>
-<p>D2Q9 BGK lattice Boltzmann approximates low-Mach Navier–Stokes:</p>
-<code>∂ρ/∂t + ∇·(ρu) = 0<br>∂u/∂t + u·∇u = −∇p/ρ + ν∇²u<br>p = ρ/3; ν = (τ − ½)/3</code>
-<p>No-slip bounce-back walls. Tunnel mode uses a velocity inlet and extrapolated outlet. Fan mode uses a local momentum actuator with open left/right edges, not a mass source or a resolved rotating fan. Pressure is relative to the right outlet.</p>
-<code>∂T/∂t + u·∇T = α∇²T<br>α = ν/0.71</code>
-<p>Passive temperature: 20 °C inlet and tunnel walls, heated obstacles. No buoyancy, compression heating or thermal feedback. Bernoulli applies along steady inviscid streamlines, not throughout wakes.</p>
-<p>Lattice units: length lu, time ts. Reynolds number uses H/4 as reference length. This low-Re, 2D laminar model is educational, not full-scale air CFD. Coandă attachment is an outcome, not guaranteed. Engineering use requires grid convergence and validation; resolution changes also change Re at fixed lattice parameters.</p>
+<label class="check"><input id="tracers" type="checkbox" checked> Tracers</label>
+<details open><summary>Advanced</summary>
+<label for="units">Units</label><select id="units"><option value="lattice">lu/ts</option><option value="kmh">km/h</option></select>
+<label for="playback">Pace <output id="playbackValue">4×</output></label><input id="playback" type="range" min="1" max="8" step="1" value="4">
+<label for="source">Source</label><select id="source"><option value="fan" selected>Fan</option><option value="tunnel">Inlet</option></select>
+<label for="fanX">Fan X <output id="fanXValue"></output></label><input id="fanX" type="range" min="0.03" max="0.97" step="0.01" value="0.06">
+<label for="fanY">Fan Y <output id="fanYValue"></output></label><input id="fanY" type="range" min="0.08" max="0.92" step="0.01" value="0.5">
+<label for="direction">Direction <output id="directionValue"></output></label><input id="direction" type="range" min="-180" max="180" step="1" value="0">
+<label for="heat">Heat <output id="heatValue"></output></label><input id="heat" type="range" min="0" max="100" step="5" value="60">
+<label for="metres">m/cell</label><input id="metres" type="number" min="0.000001" max="1000" step="any" value="0.01">
+<label for="seconds">s/step</label><input id="seconds" type="number" min="0.000001" max="1000" step="any" value="0.0001">
+<p id="scaleNote" class="muted"></p>
 </details>
+<details><summary>Info</summary>
+<p class="muted">D2Q9 LBM solver in C++/WASM. Float64. Worker thread. No buoyancy.</p></details>
 </aside>
 <section class="workspace" aria-label="Wind tunnel">
-<nav aria-label="Field view"><button data-view="flow" aria-pressed="true">Wind</button><button data-view="natural" aria-pressed="false">Human eye</button><button data-view="temperature" aria-pressed="false">Temperature</button><button data-view="pressure" aria-pressed="false">Pressure</button></nav>
-<div class="tunnel"><canvas id="canvas" tabindex="0" aria-label="2D fluid field. Use arrow keys to move the probe." aria-describedby="probe">Canvas support is required.</canvas></div>
+<nav aria-label="Field view"><button data-view="flow" aria-pressed="true">Flow</button><button data-view="natural" aria-pressed="false">Natural</button><button data-view="temperature" aria-pressed="false">Heat</button><button data-view="pressure" aria-pressed="false">Pressure</button></nav>
+<div class="tunnel"><canvas id="canvas" tabindex="0" aria-label="2D fluid field" aria-describedby="probe">Canvas required</canvas></div>
 <div class="legend"><span id="legendLabel"></span><span id="legendBar"></span><span id="legendRange"></span></div>
-<div class="readouts"><span id="metrics">Initializing…</span><output id="probe">Point at the field to inspect velocity, pressure and temperature.</output></div>
-<p class="muted" id="viewNote">Smoke follows computed velocity. Colors show local speed; legends saturate outside their fixed range.</p>
-<footer class="guide" aria-label="Control explanations">
-<h2>Reading the experiment</h2>
-<p><strong>Wind speed:</strong> low values give weaker motion; high values increase inertia and Reynolds number. Above 0.06 lu/ts, contractions may hit the low-Mach safety limit. A stopped fan stops adding momentum; the existing flow takes time to decay.</p>
-<p><strong>Simulation pace:</strong> 1× spends less time computing; 8× computes more physical timesteps per update. Actual speed depends on your device and grid. It does not multiply particle velocity or change the equations.</p>
-<p><strong>Viscosity:</strong> low values diffuse momentum less and allow sharper shear and longer-lived wakes. High values damp motion more and lower Reynolds number. In this model thermal diffusivity also rises with viscosity (α = ν/0.71).</p>
-<p><strong>Incidence:</strong> negative and positive angles tilt the section in opposite directions. Greater magnitude usually increases deflection and separation. Angle of attack is relative to the local incoming wind, so it also depends on fan direction. Live edits preserve the field but reinitialize changed boundary cells; this is not a validated moving-wing load model.</p>
-<p><strong>Surface temperature:</strong> below 20 °C cools the nearby flow; above 20 °C heats it. Temperature is passive: it changes the heat map, not density, lift, buoyancy or wind speed.</p>
-<p><strong>Fan and resolution:</strong> the fan accelerates nearby fluid in its arrow direction. Use tunnel mode for a full-width inlet or the Coandă preset slot. Smooth outlines are supersampled visually; Ultra also refines the actual fluid grid at higher cost. Grid-based no-slip boundaries remain approximate.</p>
-<p><strong>Physical units:</strong> km/h is a conversion using your chosen length/time scales; ν in m²/s = ν in lu²/ts × (metres/cell)² ÷ (seconds/step). Changing units or scale does not change the lattice flow or establish realistic air viscosity.</p>
-</footer>
+<div class="readouts"><span id="metrics">init</span><output id="probe"></output></div>
+<p class="muted" id="viewNote"></p>
 </section>
-</main><script type="module" src="main.js"></script>
+</main><script type="module" src="./main.js"></script>
 </body></html>

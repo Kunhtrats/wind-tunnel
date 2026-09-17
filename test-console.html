@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Console Test</title></head><body>
+<h1>Testing if JavaScript works...</h1>
+<script type="module">
+console.log('1. Main script loaded');
+try{
+  console.log('2. Importing solver.mjs...');
+  const {bodyAt,speedToKmh}=await import('./solver.mjs');
+  console.log('3. solver.mjs OK');
+  console.log('4. Importing wasm-solver.mjs...');
+  const mod=await import('./wasm-solver.mjs');
+  console.log('5. wasm-solver.mjs OK');
+  console.log('6. Creating Solver...');
+  const s=new mod.Solver({width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0});
+  console.log('7. Waiting for ready...');
+  await s.ready;
+  console.log('8. Solver ready!',s.width,'x',s.height);
+  s.step();
+  console.log('9. Step OK, steps:',s.steps);
+  console.log('SUCCESS - Everything works!');
+}catch(e){console.error('ERROR:',e.message,e.stack);}
+</script>
+</body></html>

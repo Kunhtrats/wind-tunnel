@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Wind Tunnel Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0b1014; color: #d9e3e7; }
+        .log { background: #121c23; padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .error { color: #ff6b6b; }
+        .success { color: #6dd8c0; }
+        .warning { color: #ffd43b; }
+    </style>
+</head>
+<body>
+    <h1>Wind Tunnel Diagnostics</h1>
+    <div id="output"></div>
+    <script type="module">
+        const log = (msg, type = 'log') => {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toISOString().substr(11,8)}] ${msg}`;
+            document.getElementById('output').appendChild(div);
+            console.log(msg);
+        };
+
+        log('Starting diagnostics...', 'log');
+
+        try {
+            log('Loading solver.mjs...', 'log');
+            const { speedToKmh, bodyAt } = await import('./solver.mjs');
+            log('✓ solver.mjs loaded', 'success');
+
+            log('Loading wasm-solver.mjs...', 'log');
+            const wasmModule = await import('./wasm-solver.mjs');
+            log('✓ wasm-solver.mjs loaded', 'success');
+
+            log('Creating Solver instance...', 'log');
+            const { Solver } = wasmModule;
+            const solver = new Solver({ width: 192, shape: 'airfoil', speed: 0.035, viscosity: 0.04, angle: 5, heat: 60, source: 'tunnel', fanX: 0.06, fanY: 0.5, direction: 0 });
+            log(`✓ Solver created: ${solver.width}×${solver.height}`, 'success');
+
+            log('Running 10 timesteps...', 'log');
+            for (let i = 0; i < 10; i++) {
+                solver.step();
+            }
+            log(`✓ Simulation running: ${solver.steps} timesteps`, 'success');
+
+            const snapshot = solver.snapshot();
+            log(`✓ Snapshot: ${snapshot.fields.length} values, max speed ${snapshot.maxSpeed.toFixed(4)}`, 'success');
+
+            solver.dispose();
+            log('✓ All systems operational!', 'success');
+            log('', 'log');
+            log('The app should work. If canvas is blank, check browser console for errors.', 'warning');
+
+        } catch (error) {
+            log(`✗ ERROR: ${error.message}`, 'error');
+            log(`Stack: ${error.stack}`, 'error');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Simple Test</title></head>
+<body style="background:#000;color:#0f0;font:20px monospace;padding:40px">
+<h1>BASIC TEST</h1>
+<div id="out">Loading...</div>
+<script>
+const out=document.getElementById('out');
+out.innerHTML='<p>1. JavaScript works</p>';
+console.log('1. JavaScript works');
+
+setTimeout(()=>{
+  out.innerHTML+='<p>2. Timeout works</p>';
+  console.log('2. Timeout works');
+  
+  import('./solver.mjs').then(()=>{
+    out.innerHTML+='<p style="color:#0f0">3. ✓ solver.mjs loaded</p>';
+    console.log('3. solver.mjs loaded');
+    
+    import('./wasm-solver.mjs').then(mod=>{
+      out.innerHTML+='<p style="color:#0f0">4. ✓ wasm-solver.mjs loaded</p>';
+      console.log('4. wasm-solver.mjs loaded');
+      
+      out.innerHTML+='<p style="color:#ff0">5. Creating Solver (this may take 10s)...</p>';
+      console.log('5. Creating Solver...');
+      const s=new mod.Solver({width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0});
+      
+      s.ready.then(()=>{
+        out.innerHTML+='<p style="color:#0f0">6. ✓ Solver ready!</p>';
+        console.log('6. Solver ready!');
+        s.step();
+        out.innerHTML+='<p style="color:#0f0">7. ✓ Step works!</p>';
+        console.log('7. Step works!');
+        out.innerHTML+='<h2 style="color:#0ff">SUCCESS!</h2>';
+      }).catch(e=>{
+        out.innerHTML+='<p style="color:#f00">ERROR in ready: '+e.message+'</p>';
+        console.error('ERROR in ready:',e);
+      });
+      
+    }).catch(e=>{
+      out.innerHTML+='<p style="color:#f00">ERROR loading wasm-solver: '+e.message+'</p>';
+      console.error('ERROR loading wasm-solver:',e);
+    });
+    
+  }).catch(e=>{
+    out.innerHTML+='<p style="color:#f00">ERROR loading solver: '+e.message+'</p>';
+    console.error('ERROR loading solver:',e);
+  });
+  
+},100);
+</script>
+</body></html>

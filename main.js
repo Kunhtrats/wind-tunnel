@@ -3,12 +3,12 @@ const $ = id => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d', { alpha: false });
 const fieldCanvas = document.createElement('canvas'), fieldCtx = fieldCanvas.getContext('2d');
 const descriptions = {
-  airfoil: 'NACA 0018 section. Compare acceleration and static pressure; vary incidence.',
-  venturi: 'A smooth contraction and diffuser. Inspect throat acceleration and pressure drop.',
-  coanda: 'A slot jet beside a rounded wall. Explore entrainment, attachment and separation.',
-  cylinder: 'Watch the wake develop. Shedding depends on Reynolds number and resolution.',
-  plate: 'An inclined plate. Compare blockage, separation and the downstream wake.',
-  empty: 'A no-slip channel. Boundary layers develop from the uniform inlet.'
+  airfoil: 'NACA 0018 section',
+  venturi: 'Contraction and diffuser',
+  coanda: 'Slot jet beside curved wall',
+  cylinder: 'Circular obstacle',
+  plate: 'Inclined flat plate',
+  empty: 'No-slip channel'
 };
 let worker, generation = 0, pending = false, paused = false, failed = false;
 let width = 0, height = 0, solid, image, frame, view = 'flow', previousSteps = 0, dirty = true, config;
@@ -30,15 +30,15 @@ function readControls() {
   $('angle').disabled = !['airfoil', 'plate'].includes(c.shape); $('experiment').textContent = descriptions[c.shape];
   return c;
 }
-function fail(message) { failed = true; pending = false; $('status').textContent = message; }
+function fail(message) { failed = true; pending = false; $('status').textContent = 'error: ' + message; }
 function reset() {
   config = readControls(); requestedConfig = null; outlineDirty = true; generation++; failed = false; pending = true; frame = null; previousSteps = 0;
-  $('status').textContent = 'Initializing…'; $('metrics').textContent = 'Initializing…';
-  $('probe').textContent = 'Point at the field to inspect velocity, pressure and temperature.';
+  $('status').textContent = 'init'; $('metrics').textContent = 'init';
+  $('probe').textContent = '';
   worker?.terminate();
   try {
     worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    worker.onerror = () => fail('Could not load solver. Serve this folder over HTTP, not file://.');
+    worker.onerror = () => fail('WebAssembly load failed. Serve over HTTP, not file://');
     worker.onmessage = ({ data }) => {
       if (data.id !== generation) return;
       if (data.type === 'error') { fail(data.message); return; }
@@ -47,9 +47,11 @@ function reset() {
         ({ width, height, solid } = data);
         fieldCanvas.width = width; fieldCanvas.height = height; image = fieldCtx.createImageData(width, height);
         for (let p = 0; p < particles.length; p += 2) spawn(p, true);
+        $('status').textContent = 'ready · C++/WASM · float64';
+        pending = false;
         return;
       }
-      pending = false; frame = data; dirty = true; $('status').textContent = paused ? 'Paused' : 'Live · laminar solver';
+      pending = false; frame = data; dirty = true; $('status').textContent = paused ? 'paused' : 'ready · C++/WASM · float64';
     };
     worker.postMessage({ type: 'init', id: generation, config });
   } catch { fail('Worker unavailable. Serve this folder over HTTP in a modern browser.'); }
@@ -70,22 +72,23 @@ const stops = [[15, 28, 62], [30, 107, 159], [59, 186, 177], [238, 213, 116], [2
 const palette = new Uint8Array(256 * 3), bodyColor = [188, 200, 205], background = [12, 21, 29];
 for (let i = 0; i < 256; i++) {
   const t = i / 255 * 4, a = Math.min(3, Math.floor(t)), f = t - a;
-  for (let c = 0; c < 3; c++) palette[i * 3 + c] = stops[a][c] * (1 - f) + stops[a + 1][c] * f;
+  for (let c = 0; c < 3; c++) palette[i * 3 + c] = stops[a][c] + (stops[a + 1][c] - stops[a][c]) * f;
 }
 function sample(f, x, y, c) {
   const ix = x | 0, iy = y | 0, j = (ix + iy * width) * 4, fx = x - ix, fy = y - iy;
-  return (1 - fy) * ((1 - fx) * f[j + c] + fx * f[j + 4 + c]) + fy * ((1 - fx) * f[j + width * 4 + c] + fx * f[j + width * 4 + 4 + c]);
+  const a = f[j + c], b = f[j + 4 + c], c1 = f[j + width * 4 + c], d = f[j + width * 4 + 4 + c];
+  return a + fx * (b - a) + fy * (c1 - a) + fx * fy * (a - b - c1 + d);
 }
 function render() {
   const f = frame.fields, pixels = image.data;
   const speedMax = Math.max(0.01, config.speed * 3), pressureMax = Math.max(0.0002, 2 * config.speed ** 2);
-  const tMin = Math.min(20, config.heat), tMax = Math.max(21, config.heat);
+  const tMin = Math.min(20, config.heat), tMax = Math.max(21, config.heat), tRange = tMax - tMin;
   for (let i = 0; i < solid.length; i++) {
     const j = i * 4;
     let value = Math.hypot(f[j], f[j + 1]) / speedMax;
     if (view === 'pressure') value = 0.5 + f[j + 2] / (2 * pressureMax);
-    if (view === 'temperature') value = (f[j + 3] - tMin) / (tMax - tMin);
-    const color = Math.round(Math.max(0, Math.min(1, value)) * 255) * 3;
+    if (view === 'temperature') value = (f[j + 3] - tMin) / tRange;
+    const color = (Math.max(0, Math.min(1, value)) * 255 | 0) * 3;
     for (let c = 0; c < 3; c++) pixels[j + c] = view === 'natural' ? background[c] : palette[color + c];
     pixels[j + 3] = 255;
   }
@@ -101,7 +104,7 @@ function render() {
       for (let t = 0; t < elapsed; t++) {
         const ix = x | 0, iy = y | 0;
         if (ix < 1 || ix >= width - 1 || iy < 1 || iy >= height - 1 || solid[ix + iy * width]) { alive = false; break; }
-        const u = sample(f, x, y, 0), v = sample(f, x, y, 1); x += u; y += v;
+        x += sample(f, x, y, 0); y += sample(f, x, y, 1);
       }
       if (!alive || x >= width - 1 || y >= height - 1 || x < 1 || y < 1 || solid[(x | 0) + (y | 0) * width]) { spawn(p); continue; }
       particles[p] = x; particles[p + 1] = y;
@@ -121,7 +124,7 @@ function render() {
         if (Y < 0.5 / height || Y > 1 - 1.5 / height || bodyAt(X, Y, config.shape, config.angle)) coverage++;
       }
       const j = (x + y * outline.width) * 4;
-      mask.data[j] = bodyColor[0]; mask.data[j + 1] = bodyColor[1]; mask.data[j + 2] = bodyColor[2]; mask.data[j + 3] = coverage * 255 / 4;
+      mask.data[j] = bodyColor[0]; mask.data[j + 1] = bodyColor[1]; mask.data[j + 2] = bodyColor[2]; mask.data[j + 3] = coverage * 63.75;
     }
     outlineCtx.putImageData(mask, 0, 0); outlineDirty = false;
   }
@@ -162,19 +165,19 @@ for (const id of ['metres', 'seconds']) $(id).addEventListener('input', () => {
 });
 $('playback').oninput = () => { $('playbackValue').textContent = $('playback').value + '×'; };
 $('reset').onclick = reset;
-$('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; $('pause').setAttribute('aria-pressed', String(paused)); if (!failed) $('status').textContent = paused ? 'Paused' : 'Live · laminar solver'; };
+$('pause').onclick = () => { paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; $('pause').setAttribute('aria-pressed', String(paused)); if (!failed) $('status').textContent = paused ? 'paused' : 'ready · C++/WASM · float64'; };
 $('tracers').onchange = () => { dirty = true; };
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
   view = button.dataset.view; dirty = true;
   document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
-  $('viewNote').textContent = { flow: 'Smoke follows computed velocity. Colors show speed; legends saturate outside their fixed range.', natural: 'Human-eye-like view: air is invisible; optional seeded smoke reveals its motion.', temperature: 'Heat is advected and diffused from the surface. No compression heating or buoyancy.', pressure: 'Static pressure relative to the mean outlet. Blue is lower; red is higher. Not a Bernoulli-derived color effect.' }[view];
+  $('viewNote').textContent = { flow: 'Tracers follow velocity. Colors show speed.', natural: 'Invisible air with optional smoke.', temperature: 'Heat advection and diffusion.', pressure: 'Static pressure relative to outlet.' }[view];
 });
 let probeX = 1, probeY = 1;
 function probe(x, y) {
   if (!frame) return;
   x = probeX = Math.max(0, Math.min(width - 1, x)); y = probeY = Math.max(0, Math.min(height - 1, y));
   const i = x + y * width, j = i * 4, f = frame.fields;
-  $('probe').textContent = solid[i] ? `Solid · T ${f[j + 3].toFixed(1)} °C` : `(${x}, ${y}) · |u| ${speedLabel(Math.hypot(f[j], f[j + 1]))} · Δp ${f[j + 2].toFixed(5)} · T ${f[j + 3].toFixed(1)} °C`;
+  $('probe').textContent = solid[i] ? `Solid · ${f[j + 3].toFixed(1)}°C` : `(${x},${y}) · |u|=${speedLabel(Math.hypot(f[j], f[j + 1]))} · Δp=${f[j + 2].toFixed(5)} · T=${f[j + 3].toFixed(1)}°C`;
 }
 canvas.addEventListener('pointermove', event => {
   const r = canvas.getBoundingClientRect();

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>WASM Test</title>
+<style>body{font:14px monospace;padding:20px;background:#000;color:#0f0}</style>
+</head><body><h1>Testing WASM Loading...</h1><pre id="out"></pre><script type="module">
+const log=s=>{document.getElementById('out').textContent+=s+'\n';console.log(s)};
+log('Step 1: Import engine.mjs...');
+try{
+  const createEngine=await import('./engine.mjs');
+  log('✓ engine.mjs imported');
+  log('Step 2: Create engine instance...');
+  const engine=await createEngine.default();
+  log('✓ Engine created: '+typeof engine);
+  log('Step 3: Test engine.Solver...');
+  log('  engine.Solver = '+typeof engine.Solver);
+  if(engine.Solver){
+    log('Step 4: Create Solver instance...');
+    const solver=new engine.Solver({width:192,shape:0,source:0,speed:0.035,viscosity:0.04,angle:5,heat:60,fanX:0.06,fanY:0.5,direction:0});
+    log('✓ Solver created');
+    log('Step 5: Get width/height...');
+    log('  Width: '+solver.width);
+    log('  Height: '+solver.height);
+    log('Step 6: Call step()...');
+    solver.step();
+    log('✓ Step completed');
+    log('SUCCESS! WASM is working.');
+  }else{log('ERROR: engine.Solver not found');}
+}catch(e){log('ERROR: '+e.message);log(e.stack);}
+</script></body></html>

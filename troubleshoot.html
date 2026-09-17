@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Troubleshoot</title>
+<style>body{font:14px system-ui;max-width:800px;margin:40px auto;padding:20px;background:#0b1014;color:#d9e3e7}
+h1{color:#6dd8c0}button{background:#6dd8c0;color:#0b1014;border:0;padding:10px 20px;border-radius:6px;cursor:pointer;margin:5px}
+#log{font:12px monospace;background:#121c23;padding:15px;border-radius:6px;margin:15px 0;max-height:400px;overflow-y:auto}</style>
+</head><body>
+<h1>🔧 Wind Tunnel Troubleshooting</h1>
+<button onclick="test()">Run Diagnostic</button>
+<button onclick="location.href='/'">Back to App</button>
+<div id="log"></div>
+<script>
+const log=document.getElementById('log'),append=(m,c='#a8bac4')=>{log.innerHTML+=`<div style="color:${c}">${m}</div>`;log.scrollTop=log.scrollHeight};
+async function test(){log.innerHTML='';append('Testing WebAssembly...','#6dd8c0');
+try{const{Solver}=await import('./wasm-solver.mjs');append('✓ WASM loaded','#6dd8c0');
+const s=new Solver({width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0});
+append(`✓ Solver: ${s.width}×${s.height}`,'#6dd8c0');for(let i=0;i<5;i++)s.step();
+const snap=s.snapshot();append(`✓ Running: ${s.steps} steps, speed ${snap.maxSpeed.toFixed(4)}`,'#6dd8c0');
+s.dispose();append('✓ ALL TESTS PASSED','#6dd8c0');append('App should work! Refresh main page.','#ffd43b');}
+catch(e){append(`✗ ERROR: ${e.message}`,'#ff6b6b');append('Try: rebuild WASM or use different browser','#ffd43b');}}
+window.onload=()=>setTimeout(test,500);
+</script></body></html>

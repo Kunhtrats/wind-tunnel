@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Worker Import Test</title>
+<style>body{font:14px monospace;padding:20px;background:#000;color:#0f0}</style>
+</head><body><h1>Testing Worker Import...</h1><pre id="out"></pre><script>
+const log=s=>{document.getElementById('out').textContent+=s+'\n';console.log(s)};
+
+log('Test 1: Simple worker (no imports)');
+try{
+  const w1=new Worker('worker-test-simple.js');
+  w1.onmessage=({data})=>{log('✓ Simple worker: '+data.message);w1.terminate();};
+  w1.onerror=(e)=>{log('✗ Simple worker error: '+e.message);};
+  setTimeout(()=>log('...waiting for simple worker...'),100);
+}catch(e){log('✗ Simple worker failed: '+e.message);}
+
+setTimeout(()=>{
+  log('\nTest 2: Module worker (with imports)');
+  try{
+    const w2=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
+    w2.onmessage=({data})=>{log('✓ Worker message: type='+data.type);if(data.type==='ready')w2.terminate();};
+    w2.onerror=(e)=>{log('✗ Worker error: '+e.message+' at '+e.filename+':'+e.lineno);};
+    setTimeout(()=>{
+      log('Sending init to worker...');
+      w2.postMessage({type:'init',id:1,config:{width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0}});
+    },1000);
+    setTimeout(()=>log('⚠ If stuck here, worker is hanging on WASM load'),5000);
+  }catch(e){log('✗ Module worker failed: '+e.message);}
+},2000);
+</script></body></html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Full Diagnostic</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}
+body{font:14px/1.5 monospace;padding:20px;background:#0a0a0a;color:#0f0}
+h1{margin-bottom:20px;color:#0ff}
+.test{background:#111;border-left:3px solid #0f0;padding:10px;margin:10px 0}
+.test.fail{border-color:#f00;color:#f00}
+.test.wait{border-color:#ff0;color:#ff0}
+button{background:#0f0;color:#000;border:0;padding:10px 20px;margin:5px;cursor:pointer;font-weight:bold}
+#log{background:#000;padding:10px;margin:10px 0;max-height:400px;overflow-y:auto;border:1px solid #333}</style>
+</head><body>
+<h1>🔬 Complete Diagnostic Test</h1>
+<button onclick="runAll()">▶ Run All Tests</button>
+<div id="tests"></div>
+<div id="log"></div>
+<script type="module">
+const tests=document.getElementById('tests');
+const logEl=document.getElementById('log');
+const log=s=>{logEl.innerHTML+='<div>'+s+'</div>';console.log(s)};
+const addTest=(name,status='wait')=>{
+  const d=document.createElement('div');d.className='test '+status;d.id='test-'+tests.children.length;
+  d.textContent='['+status.toUpperCase()+'] '+name;tests.appendChild(d);return d;
+};
+const pass=(d,msg)=>{d.className='test';d.textContent='[✓] '+d.textContent.split('] ')[1]+(msg?' - '+msg:'');};
+const fail=(d,msg)=>{d.className='test fail';d.textContent='[✗] '+d.textContent.split('] ')[1]+' - '+msg;};
+
+window.runAll=async()=>{
+  tests.innerHTML='';logEl.innerHTML='';
+  
+  let t=addTest('WebAssembly support');
+  if(typeof WebAssembly==='undefined'){fail(t,'Not supported');return;}
+  pass(t);
+  
+  t=addTest('Worker support');
+  if(typeof Worker==='undefined'){fail(t,'Not supported');return;}
+  pass(t);
+  
+  t=addTest('Module worker support');
+  try{const w=new Worker(new URL('./test-worker-simple.js',import.meta.url));w.terminate();pass(t);}
+  catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Fetch engine.mjs');
+  try{const r=await fetch('engine.mjs',{method:'HEAD'});if(!r.ok)throw new Error('HTTP '+r.status);pass(t);}
+  catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Fetch engine.wasm');
+  try{const r=await fetch('engine.wasm',{method:'HEAD'});if(!r.ok)throw new Error('HTTP '+r.status);
+  const size=(r.headers.get('content-length')/1024).toFixed(1)+'KB';pass(t,size);}
+  catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Import engine.mjs');
+  let createEngine;
+  try{createEngine=(await import('./engine.mjs?t='+Date.now())).default;pass(t);}
+  catch(e){fail(t,e.message);log('Stack: '+e.stack);return;}
+  
+  t=addTest('Create engine instance (may take 5-10s)');
+  let engine;
+  try{
+    const start=Date.now();
+    engine=await Promise.race([
+      createEngine(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('Timeout after 30s')),30000))
+    ]);
+    pass(t,(Date.now()-start)+'ms');
+  }catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Check engine.Solver exists');
+  if(!engine.Solver){fail(t,'Solver not found');return;}
+  pass(t);
+  
+  t=addTest('Create Solver instance');
+  let solver;
+  try{
+    solver=new engine.Solver({width:192,shape:0,source:0,speed:0.035,viscosity:0.04,angle:5,heat:60,fanX:0.06,fanY:0.5,direction:0});
+    pass(t);
+  }catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Run simulation step');
+  try{solver.step();pass(t,'steps='+solver.steps);}
+  catch(e){fail(t,e.message);return;}
+  
+  t=addTest('Test worker.js');
+  try{
+    const w=new Worker(new URL('./worker.js',import.meta.url),{type:'module'});
+    await new Promise((res,rej)=>{
+      const timeout=setTimeout(()=>rej(new Error('Worker timeout after 10s')),10000);
+      w.onerror=(e)=>{clearTimeout(timeout);rej(e);};
+      w.onmessage=({data})=>{
+        if(data.type==='ready'){clearTimeout(timeout);w.terminate();res();}
+        else if(data.type==='error'){clearTimeout(timeout);rej(new Error(data.message));}
+      };
+      w.postMessage({type:'init',id:1,config:{width:192,shape:'airfoil',speed:0.035,viscosity:0.04,angle:5,heat:60,source:'tunnel',fanX:0.06,fanY:0.5,direction:0}});
+    });
+    pass(t);
+  }catch(e){fail(t,e.message);log('Worker failed: '+e.stack);return;}
+  
+  log('\n✓✓✓ ALL TESTS PASSED ✓✓✓\n');
+  log('The app SHOULD work. If still stuck at Initializing:');
+  log('1. Hard refresh main page (Ctrl+Shift+R)');
+  log('2. Clear browser cache');
+  log('3. Try incognito/private mode');
+  log('4. Check browser console for errors');
+};
+
+setTimeout(runAll,500);
+</script></body></html>
