@@ -1,4 +1,4 @@
-import createEngine from './engine.mjs';
+import createEngine from '../engine.mjs';
 export { speedToKmh } from './solver.mjs';
 export const SHAPES = ['airfoil', 'venturi', 'coanda', 'cylinder', 'plate', 'empty'];
 

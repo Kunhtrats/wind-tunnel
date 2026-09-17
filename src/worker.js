@@ -1,4 +1,4 @@
-import { Solver } from './wasm-solver.mjs';
+import { Solver } from './src/wasm-solver.mjs';
 let solver;
 
 console.log('[Worker] Starting...');
