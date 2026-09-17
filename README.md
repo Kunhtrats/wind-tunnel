@@ -20,12 +20,6 @@
 - 📊 **Float64 precision**: High-accuracy double-precision computation
 - 🎮 **Live controls**: Adjust speed, viscosity, angle, resolution on-the-fly
 
-## 🎬 Preview
-
-<div align="center">
-  <img src="https://github.com/Kunhtrats/wind-tunnel/assets/preview.png" alt="Wind Tunnel Preview" width="800"/>
-</div>
-
 ## 🚀 Quick Start
 
 ### Run Locally

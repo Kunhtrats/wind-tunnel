@@ -1,4 +1,4 @@
-import { bodyAt, speedToKmh } from './src/solver.mjs';
+import { bodyAt, speedToKmh } from './solver.mjs';
 const $ = id => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d', { alpha: false });
 const fieldCanvas = document.createElement('canvas'), fieldCtx = fieldCanvas.getContext('2d');
@@ -37,7 +37,7 @@ function reset() {
   $('probe').textContent = '';
   worker?.terminate();
   try {
-    worker = new Worker(new URL('./src/worker.js', import.meta.url), { type: 'module' });
+    worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     worker.onerror = () => fail('WebAssembly load failed. Serve over HTTP, not file://');
     worker.onmessage = ({ data }) => {
       if (data.id !== generation) return;
